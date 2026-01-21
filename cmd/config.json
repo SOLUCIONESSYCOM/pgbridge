@@ -1,0 +1,95 @@
+{
+    "Server": {
+        "HttpPort": 9090
+    },
+    "Log": {
+        "Enabled": true,
+        "Console": true,
+        "BeutifyConsoleLog": false,
+        "File": false,
+        "FilePath": "D:\\SYPAGO_DATA\\postgres_connector\\logs",
+        "MinLevel": "INFO",
+        "RotationMaxSizeMB": 10,
+        "MaxAgeDay": 30,
+        "MaxBackups": 5,
+        "Compress": true,
+        "GlobalLogContext": {
+            "ServiceName": "sygateway",
+            "Version": "1.0.0"
+        }
+    },
+    "Postgres": {
+        "ConnectionString": "host=192.168.100.102 port=6455 dbname=sygateway sslmode=disable pool_min_conns=4 pool_max_conns=24 application_name=sycom_postgres_connector",
+        "User": "user_sypago",
+        "Password": "lTf7$12vgeBQnrOyhtctJFdwgVX",
+        "SlotName": "cdc_sygateway_slot",
+        "WorkerBufferSize": 320,
+        "GoFinalLSN": false,
+        "Listeners": [
+            {
+                "Publication": "pub_outbox_messages",
+                "Table": "public.outbox_messages",
+                "Actions": [
+                    "insert",
+                    "update"
+                ],
+                "Pipeline": {
+                    "Targets": [
+                        {
+                            "Name": "outbox_messages_topic",
+                            "Group": "",
+                            "SendAsTransaction": false,
+                            "Filter": {
+                                "Actions": [
+                                    "insert",
+                                    "update"
+                                ],
+                                "Conditions": [
+                                    {
+                                        "Field": "new_data.should_publish",
+                                        "Operator": "==",
+                                        "Value": true
+                                    }
+                                ]
+                            }
+                        }
+                    ]
+                }
+            },
+            {
+                "Publication": "pub_process_transactions",
+                "Table": "public.transaction_process_entries",
+                "Actions": [
+                    "insert"
+                ],
+                "Pipeline": {
+                    "Targets": [
+                        {
+                            "Name": "transaction_process_entries_topic",
+                            "Group": "",
+                            "SendAsTransaction": false,
+                            "Filter": {
+                                "Actions": [
+                                    "insert"
+                                ],
+                                "Conditions": [
+                                    {
+                                        "Field": "new_data.should_publish",
+                                        "Operator": "==",
+                                        "Value": true
+                                    }
+                                ]
+                            }
+                        }
+                    ]
+                }
+            }
+        ]
+    },
+    "Kafka": {
+        "BootstrapServers": [
+            "localhost:19092"
+        ],
+        "ClientID": "sycom_postgres_connector"
+    }
+}

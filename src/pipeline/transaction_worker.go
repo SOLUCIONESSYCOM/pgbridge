@@ -1,0 +1,191 @@
+package pipeline
+
+import (
+	"context"
+	"fmt"
+	"sync"
+	"time"
+
+	"github.com/SOLUCIONESSYCOM/pgbridge/src/observability"
+)
+
+type TransactionWorker struct {
+	groupKey       string
+	lsnCoordinator *LSNCoordinator
+	sink           EventSink
+	eventCh        chan *TransactionEvent
+	wg             sync.WaitGroup
+	stopCh         chan struct{}
+	observability.Logger
+	metrics *observability.ConnectorMetrics
+	stopped sync.Once // CRITICAL FIX: Prevenir cierres múltiples de canales
+}
+
+func NewTransactionWorker(groupKey string, lsnCoordinator *LSNCoordinator,
+	sink EventSink,
+	bufferSize int,
+	logger observability.Logger) *TransactionWorker {
+
+	worker := &TransactionWorker{
+		groupKey:       groupKey,
+		lsnCoordinator: lsnCoordinator,
+		sink:           sink,
+		eventCh:        make(chan *TransactionEvent, bufferSize),
+		wg:             sync.WaitGroup{},
+		stopCh:         make(chan struct{}),
+		Logger:         logger,
+		metrics:        observability.GetConnectorMetrics(),
+	}
+
+	// Registrar tamaño inicial del buffer
+	if worker.metrics != nil {
+		worker.metrics.SetWorkerBufferSize(groupKey, "transaction", float64(bufferSize))
+	}
+
+	return worker
+}
+
+func (tw *TransactionWorker) processEvent(ctx context.Context, e *TransactionEvent) error {
+
+	if e == nil {
+		tw.Error(ctx, "Transaction event is nil", nil, "group", tw.groupKey)
+
+		return fmt.Errorf("transaction event is nil")
+	}
+
+	tw.Trace(ctx, "Procesando transacción completa", "group", tw.groupKey, "lsn", e.LSN)
+
+	err := tw.sink.PersistTransaction(ctx, e)
+
+	if err != nil {
+		tw.Error(ctx, "Error persisting transaction", err, "group", tw.groupKey, "lsn", e.LSN)
+
+		return err
+	}
+
+	if e.LSN > 0 {
+		tw.lsnCoordinator.ReportLSN(ctx, tw.groupKey, e.LSN)
+	}
+
+	return nil
+}
+
+func (tw *TransactionWorker) run(ctx context.Context) {
+	defer tw.wg.Done()
+
+	for {
+		select {
+		case <-ctx.Done():
+			tw.Info(ctx, "TransactionWorker stopped by context done", nil,
+				"group", tw.groupKey)
+			return
+		case <-tw.stopCh:
+			tw.Info(ctx, "TransactionWorker stopped by stop channel", nil,
+				"group", tw.groupKey)
+			return
+		case event := <-tw.eventCh:
+			// Actualizar métrica de eventos en proceso
+			if tw.metrics != nil {
+				tw.metrics.SetEventsInProcess(tw.groupKey, "transaction", float64(len(tw.eventCh)))
+			}
+
+			tw.Trace(ctx, "Procesando transacción", "group", tw.groupKey, "lsn", event.LSN)
+
+			err := tw.processEvent(ctx, event)
+			if err != nil {
+				tw.Error(ctx, "Error processing transaction", err,
+					"group", tw.groupKey, "lsn", event.LSN)
+			} else {
+				// Incrementar contador de transacciones procesadas por worker
+				if tw.metrics != nil {
+					tw.metrics.IncTransactionsProcessedByWorker(tw.groupKey, "transaction")
+				}
+			}
+
+			// Actualizar métrica de eventos en proceso después de procesar
+			if tw.metrics != nil {
+				tw.metrics.SetEventsInProcess(tw.groupKey, "transaction", float64(len(tw.eventCh)))
+			}
+
+			tw.Trace(ctx, "Transacción procesada", "group", tw.groupKey, "lsn", event.LSN)
+		}
+	}
+}
+
+func (tw *TransactionWorker) Start(ctx context.Context) {
+	tw.wg.Add(1)
+	go tw.run(ctx)
+}
+
+func (tw *TransactionWorker) Stop(ctx context.Context) {
+	// CRITICAL FIX: Usar sync.Once para prevenir cierres múltiples de canales
+	// Esto evita panics si Stop() se llama múltiples veces
+	tw.stopped.Do(func() {
+		// Enviar señal de stop sin bloquear
+		select {
+		case tw.stopCh <- struct{}{}:
+		default:
+			// Si el canal ya está lleno, el worker ya sabe que debe detenerse
+		}
+
+		// Cerrar canales para que el worker sepa que debe terminar
+		// sync.Once garantiza que esto solo se ejecute una vez
+		if tw.eventCh != nil {
+			close(tw.eventCh)
+			tw.eventCh = nil // Marcar como cerrado
+		}
+
+		// Esperar a que el worker termine (con timeout)
+		done := make(chan struct{})
+		go func() {
+			tw.wg.Wait()
+			close(done)
+		}()
+
+		select {
+		case <-done:
+			// Worker terminó correctamente
+		case <-ctx.Done():
+			// Timeout o contexto cancelado
+			tw.Warn(ctx, "Timeout waiting for transaction worker to stop", nil, "group", tw.groupKey)
+		case <-time.After(5 * time.Second):
+			// Timeout de seguridad
+			tw.Warn(ctx, "Timeout waiting for transaction worker to stop", nil, "group", tw.groupKey)
+		}
+
+		// Cerrar stopCh al final para evitar panics
+		// sync.Once garantiza que esto solo se ejecute una vez
+		if tw.stopCh != nil {
+			close(tw.stopCh)
+			tw.stopCh = nil // Marcar como cerrado
+		}
+	})
+}
+
+func (tw *TransactionWorker) Process(ctx context.Context, txEvent *TransactionEvent) error {
+	if tw.eventCh == nil {
+		return fmt.Errorf("channel is closed")
+	}
+
+	//Patron para evitar bloqueos en el canal
+
+	select {
+	case tw.eventCh <- txEvent:
+		return nil
+	case <-ctx.Done():
+		return ctx.Err()
+	case <-time.After(5 * time.Second):
+		return fmt.Errorf("worker buffer full, timeout after 5s")
+	}
+}
+
+func (tw *TransactionWorker) PendingEvents() int {
+	if tw.eventCh == nil {
+		return 0
+	}
+	return len(tw.eventCh)
+}
+
+func (tw *TransactionWorker) HasPendingEvents() bool {
+	return tw.PendingEvents() > 0
+}
