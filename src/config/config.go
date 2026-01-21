@@ -143,7 +143,7 @@ func loadConfig() error {
 	}
 
 	execDir := filepath.Dir(execPath)
-	configPath := filepath.Join(execDir, "config.json")
+	configPath := filepath.Join(execDir, "config", "config.json")
 
 	cfg, err = configuro.NewFromJsonFiles(true, configPath)
 	if err != nil {

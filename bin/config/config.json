@@ -8,7 +8,7 @@
         "BeutifyConsoleLog": false,
         "File": false,
         "FilePath": "D:\\SYPAGO_DATA\\postgres_connector\\logs",
-        "MinLevel": "INFO",
+        "MinLevel": "WARN",
         "RotationMaxSizeMB": 10,
         "MaxAgeDay": 30,
         "MaxBackups": 5,

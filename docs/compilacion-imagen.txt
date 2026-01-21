@@ -6,4 +6,4 @@ docker build -t sycom/pgbridge:1.0.0 -f ./Dockerfile ./ `
 
 Comando para guardar la imagen en un archivo tar se corre desde la carpeta raiz del proyecto:
 
-docker save -o pgbridge_0_0_10.tar sycom/pgbridge:1.0.0
+docker save -o pgbridge_1_0_0.tar sycom/pgbridge:1.0.0
