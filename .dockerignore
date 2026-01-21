@@ -1,0 +1,40 @@
+# Binarios compilados
+*.exe
+bin/
+*.bin
+
+# Logs
+logs/
+*.log
+
+# Archivos de configuración local (se montan como volumen)
+config.json
+
+# Git
+.git/
+.gitignore
+
+# Documentación (opcional, se puede incluir si se necesita)
+# docs/
+
+# Archivos temporales
+*.tmp
+*.swp
+*.swo
+*~
+
+# IDE
+.vscode/
+.idea/
+*.iml
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Certificados (se copian explícitamente si existen)
+bin/certificates/
+
+# Output de pruebas
+output/
+coverage/
