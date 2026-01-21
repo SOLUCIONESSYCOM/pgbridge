@@ -1,0 +1,9 @@
+Comando para compilar la imagen se corre desde la carpeta raiz del proyecto:
+
+docker build -t sycom/pgbridge:1.0.0 -f ./Dockerfile ./ `
+--build-arg GITHUB_USER=<github_user> `
+--build-arg GITHUB_PAT=<github_pat>
+
+Comando para guardar la imagen en un archivo tar se corre desde la carpeta raiz del proyecto:
+
+docker save -o pgbridge_0_0_10.tar sycom/pgbridge:1.0.0
