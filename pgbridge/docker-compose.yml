@@ -1,0 +1,42 @@
+services:
+  pgbridge:
+    image: sycom/pgbridge:1.0.0
+    container_name: pgbridge
+    restart: unless-stopped
+    
+    # ports:
+    #   - "9090:9090"  # Puerto para métricas HTTP y health checks
+    
+    volumes:
+      # Montar config.json desde el directorio actual
+      # El código busca en: /app/config/config.json
+      - ./config/:/app/config/
+      # Alternativa: si prefieres usar docs/config.json
+      # - ./docs/config.json:/app/config/config.json:ro
+    
+    environment:
+      # Variables de entorno opcionales (si las necesitas)
+      - TZ=America/Caracas
+    
+    healthcheck:
+      # Verificar que el proceso esté corriendo
+      # Nota: Para un healthcheck HTTP completo (usando /health endpoint),
+      # necesitarías instalar wget o curl en la imagen Alpine
+      # Alternativa: usar un script externo o instalar wget en el Dockerfile
+      test: ["CMD-SHELL", "ps aux | grep -q '[p]gbridge' || exit 1"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 40s
+    
+    networks:
+      - kafka_network
+      - postgres_network
+
+networks:
+  kafka_network:
+    driver: bridge
+    external: true
+  postgres_network:
+    driver: bridge
+    external: true
