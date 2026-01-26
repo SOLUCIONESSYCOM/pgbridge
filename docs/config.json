@@ -19,7 +19,7 @@
         }
     },
     "Postgres": {
-        "ConnectionString": "host=192.168.100.102 port=6455 dbname=sygateway sslmode=disable pool_min_conns=4 pool_max_conns=24 application_name=sycom_postgres_connector",
+        "ConnectionString": "host=localhost port=6455 dbname=sygateway sslmode=disable pool_min_conns=4 pool_max_conns=24 application_name=sycom_postgres_connector",
         "User": "user_sypago",
         "Password": "lTf7$12vgeBQnrOyhtctJFdwgVX",
         "SlotName": "cdc_sygateway_slot",
@@ -28,7 +28,7 @@
         "Listeners": [
             {
                 "Publication": "pub_outbox_messages",
-                "Table": "public.outbox_messages",
+                "Table": "core.outbox_message",
                 "Actions": [
                     "insert",
                     "update"
@@ -58,7 +58,7 @@
             },
             {
                 "Publication": "pub_process_transactions",
-                "Table": "public.transaction_process_entries",
+                "Table": "core.transaction_process_entry",
                 "Actions": [
                     "insert"
                 ],
